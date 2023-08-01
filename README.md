@@ -62,7 +62,7 @@ This tool is distributed under the MIT License. See the `LICENSE` file for more 
 
 ## Contributing
 
-Feel free to contribute to this project by creating issues or submitting pull requests on the GitHub repository: https://github.com/yourusername/csv-to-psql-tool
+Feel free to contribute to this project by creating issues or submitting pull requests on the GitHub repository: https://github.com/stock-jarvis/pgx_multiLoad
 
 Your contributions are highly appreciated!
 
