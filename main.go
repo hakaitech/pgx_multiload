@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	source   = flag.String("s", "", "Source Files to be copied")
+	source   = flag.String("s", "", "Source Files Directory to be copied")
 	host     = flag.String("h", "", "Hostname for destination PSQL")
 	db       = flag.String("d", "", "Database for destination PSQL")
 	password = flag.String("p", "", "Password for destination PSQL user postgres")
