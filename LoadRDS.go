@@ -68,7 +68,6 @@ func Go(p string, config Config, exc string, threads int) {
 				datum, _ := csvreader.ReadAll()
 				for _, dp := range datum {
 					row := make([]interface{}, len(dp))
-					fmt.Println(len(dp))
 					row[0] = dp[0]
 					row[1], _ = strconv.Atoi(dp[1])
 					i := 2
