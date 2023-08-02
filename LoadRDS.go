@@ -9,12 +9,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx"
 )
 
 func Go(p string, config Config, exc string, threads int) {
 	//this for nse
+	fmt.Println("RUNNING LOADER FOR :", p, " WITH :", threads, " on exchange :", exc)
+	time.Sleep(time.Second * 30)
 	headers := GenerateTableHeaders()
 	counter := 0
 	var wg sync.WaitGroup
