@@ -48,8 +48,8 @@ func Go(p string, config Config, exc string, threads int) {
 					log.Println("Error: ", err)
 				}
 				defer db.Close()
-				res, err := db.Exec(createTableQuery)
-				log.Println(res)
+				_, err = db.Exec(createTableQuery)
+
 				if err != nil {
 					log.Println("Error: ", err)
 				}
@@ -70,7 +70,6 @@ func Go(p string, config Config, exc string, threads int) {
 					row := make([]interface{}, len(dp))
 					fmt.Println(len(dp))
 					row[0] = dp[0]
-					log.Println(row[0])
 					row[1], _ = strconv.Atoi(dp[1])
 					i := 2
 					for i < len(dp) {
@@ -90,7 +89,7 @@ func Go(p string, config Config, exc string, threads int) {
 				}
 
 				x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
-				fmt.Println(ffname, " DONE: ", x, err)
+				log.Println(ffname, " DONE: ", x, err)
 				db.Close()
 			}(info.Name(), path)
 
