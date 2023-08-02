@@ -26,8 +26,10 @@ func Go(p string, config Config, exc string, threads int) {
 			wg.Add(1)
 			counter += 1
 			if counter >= threads {
+				log.Println("Waiting")
 				wg.Wait()
 				counter = 1
+				log.Println("Threads empty")
 			}
 			go func(ffname string, fpath string, synchronizer *sync.WaitGroup) {
 				defer synchronizer.Done()
