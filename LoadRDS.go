@@ -46,7 +46,7 @@ func Go(p string, config Config, exc string, threads int) {
 				if err != nil {
 					log.Println("Error: ", err)
 				}
-
+				defer db.Close()
 				res, err := db.Exec(createTableQuery)
 				log.Println(res)
 				if err != nil {
@@ -90,7 +90,7 @@ func Go(p string, config Config, exc string, threads int) {
 
 				x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
 				fmt.Println(x, err)
-				db.Close()
+
 			}(info.Name(), path)
 
 		}
