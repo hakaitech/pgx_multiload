@@ -7,7 +7,10 @@ require (
 	github.com/lib/pq v1.10.9
 )
 
-require github.com/pkg/errors v0.9.1 // indirect
+require (
+	github.com/jackc/puddle v1.3.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+)
 
 require (
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
