@@ -23,6 +23,7 @@ func Go(p string, config Config, exc string, threads int) {
 			wg.Add(1)
 			counter += 1
 			if counter >= threads {
+				log.Println("WAITING")
 				wg.Wait()
 				counter = 1
 			}
@@ -89,8 +90,8 @@ func Go(p string, config Config, exc string, threads int) {
 				}
 
 				x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
-				fmt.Println(x, err)
-
+				fmt.Println(ffname, " DONE: ", x, err)
+				db.Close()
 			}(info.Name(), path)
 
 		}
