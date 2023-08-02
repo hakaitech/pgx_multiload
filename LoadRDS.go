@@ -19,21 +19,14 @@ func Go(p string, config Config, exc string, threads int) {
 	fmt.Println("RUNNING LOADER FOR :", p, " WITH :", threads, " on exchange :", exc)
 	time.Sleep(time.Second * 30)
 	headers := GenerateTableHeaders()
-	counter := 0
+
 	var wg sync.WaitGroup
 	e := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
 		if err == nil && strings.Contains(info.Name(), ".csv") {
 			wg.Add(1)
-			counter += 1
-			if counter >= threads {
-				log.Println("WAITING")
-				wg.Wait()
-				counter = 1
-			}
-
-			go func(ffname string, fpath string) {
-				defer wg.Done()
-
+			go func(ffname string, fpath string, synchronizer *sync.WaitGroup) {
+				defer synchronizer.Done()
+				log.Println(ffname, " Started")
 				//create table query firxt
 				createTableQuery := fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s);", exc, ffname[:len(ffname)-4], headers)
 				ccfg, _ := pgx.ParseConnectionString("user=postgres password=MyPassw0rd! host=ruphiya.cvp1ajcdfcnk.ap-south-1.rds.amazonaws.com port=5432  dbname=ruphiya sslmode=require")
@@ -93,8 +86,7 @@ func Go(p string, config Config, exc string, threads int) {
 				x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
 				log.Println(ffname, " DONE: ", x, err)
 				db.Close()
-				counter -= 1
-			}(info.Name(), path)
+			}(info.Name(), path, &wg)
 
 		}
 		return nil
