@@ -93,6 +93,7 @@ func Go(p string, config Config, exc string, threads int) {
 				x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
 				log.Println(ffname, " DONE: ", x, err)
 				db.Close()
+				counter -= 1
 			}(info.Name(), path)
 
 		}
