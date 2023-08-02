@@ -23,7 +23,6 @@ func Go(p string, config Config, exc string, threads int) {
 	var wg sync.WaitGroup
 	e := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
 		if err == nil && strings.Contains(info.Name(), ".csv") {
-			wg.Add(1)
 			counter += 1
 			if counter >= threads {
 				log.Println("Waiting")
@@ -31,6 +30,7 @@ func Go(p string, config Config, exc string, threads int) {
 				counter = 1
 				log.Println("Threads empty")
 			}
+			wg.Add(1)
 			go func(ffname string, fpath string, synchronizer *sync.WaitGroup) {
 				defer synchronizer.Done()
 				log.Println(ffname, " Started")
@@ -100,7 +100,6 @@ func Go(p string, config Config, exc string, threads int) {
 		return nil
 
 	})
-	wg.Wait()
 	if e != nil {
 		log.Println(e)
 	}
