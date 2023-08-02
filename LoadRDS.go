@@ -31,13 +31,16 @@ func Go(p string, config Config, exc string, threads int) {
 
 				//create table query firxt
 				createTableQuery := fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s);", exc, ffname[:len(ffname)-4], headers)
-				db, err := pgx.Connect(pgx.ConnConfig{
-					Host:     config.Host,
-					Port:     5432,
-					Database: config.Name,
-					User:     config.User,
-					Password: config.Pwd,
-				})
+				ccfg, _ := pgx.ParseConnectionString("user=postgres password=MyPassw0rd! host=ruphiya.cvp1ajcdfcnk.ap-south-1.rds.amazonaws.com port=5432  dbname=ruphiya sslmode=require")
+				db, err := pgx.Connect(ccfg)
+				// pgx.ConnConfig{
+				// 	Host:     config.Host,
+				// 	Port:     5432,
+				// 	Database: config.Name,
+				// 	User:     config.User,
+				// 	Password: config.Pwd,
+
+				// }
 				if err != nil {
 					log.Println("Error: ", err)
 				}
