@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/csv"
 	"fmt"
 	"log"
@@ -11,8 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx"
 )
 
 func Go(p string, config Config, exc string, threads int) {
@@ -20,11 +18,6 @@ func Go(p string, config Config, exc string, threads int) {
 	headers := GenerateTableHeaders()
 	counter := 0
 	var wg sync.WaitGroup
-	pool, err := pgxpool.Connect(context.Background(), "user=postgres password=MyPassw0rd! host=ruphiya.cvp1ajcdfcnk.ap-south-1.rds.amazonaws.com port=5432  dbname=ruphiya sslmode=require")
-	if err != nil {
-		log.Println(err)
-	}
-	defer pool.Close()
 	e := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
 		if err == nil && strings.Contains(info.Name(), ".csv") {
 			wg.Add(1)
@@ -38,6 +31,8 @@ func Go(p string, config Config, exc string, threads int) {
 
 				//create table query firxt
 				createTableQuery := fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s);", exc, ffname[:len(ffname)-4], headers)
+				ccfg, _ := pgx.ParseConnectionString("user=postgres password=MyPassw0rd! host=ruphiya.cvp1ajcdfcnk.ap-south-1.rds.amazonaws.com port=5432  dbname=ruphiya sslmode=require")
+				db, err := pgx.Connect(ccfg)
 
 				// pgx.ConnConfig{
 				// 	Host:     config.Host,
@@ -50,7 +45,8 @@ func Go(p string, config Config, exc string, threads int) {
 				if err != nil {
 					log.Println("Error: ", err)
 				}
-				res, err := pool.Exec(context.Background(), createTableQuery)
+				defer db.Close()
+				res, err := db.Exec(createTableQuery)
 				log.Println(res)
 				if err != nil {
 					log.Println("Error: ", err)
@@ -91,7 +87,7 @@ func Go(p string, config Config, exc string, threads int) {
 					rows = append(rows, row)
 				}
 
-				x, err := pool.CopyFrom(context.Background(), pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
+				x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
 				fmt.Println(x, err)
 
 			}(info.Name(), path)
