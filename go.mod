@@ -9,6 +9,7 @@ require (
 
 require (
 	github.com/jackc/puddle v1.3.0 // indirect
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 )
 
