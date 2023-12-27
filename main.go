@@ -44,52 +44,54 @@ type Config struct {
 func main() {
 	var config Config
 	flag.Parse()
-	config.Host = *host
-	config.Name = *db
-	config.Port = *port
-	config.Pwd = *password
-	config.User = *user
+	config.Host = "103.191.209.107"
+	config.Name = "ruphiya"
+	config.Port = 5432
+	config.Pwd = "1NuGd02T92VbhPmFu0e3sWekVX6R0P"
+	config.User = "anitix"
 	// f, err := os.OpenFile("pgx_multiload.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	// if err != nil {
 	// 	log.Fatal("Error in creating Logfile")
 	// }
 	// defer f.Close()
 	// log.SetOutput(f)
-	if *spot {
-		GoSpot(*source, config, *schema, *threads)
-	}
-	if *fno {
-		Go(*source, config, *schema, *threads)
-	}
-	if *candle {
-		GoCandle(*source, config, *schema, *threads)
-	}
-	if *cds {
-		GoCDS(*source, config, *schema, *threads)
-	}
+	// if *spot {
+	// 	GoSpot(*source, config, *schema, *threads)
+	// }
+	// if *fno {
+	// 	Go(*source, config, *schema, *threads)
+	// }
+	// if *candle {
+	// 	GoCandle(*source, config, *schema, *threads)
+	// }
+	// if *cds {
+	// 	GoCDS(*source, config, *schema, *threads)
+	// }
+	Go("/Data", config, "nse", 120)
 
 }
 
 func Go(p string, config Config, exc string, threads int) {
 	//this for nse
-	var errFiles []string
+	var errFiles map[string]error
 	st := time.Now()
 	log.Println("RUNNING LOADER FOR :", p, " WITH :", threads, "threads on exchange :", exc)
 	time.Sleep(time.Second * 5)
 	headers := GenerateTableHeaders()
 	var wg sync.WaitGroup
 	var paths []string
+	log.Println("Generating File Cache")
 	e := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
 		if err == nil && strings.Contains(info.Name(), ".csv") {
 			paths = append(paths, path)
 		}
 		return nil
 	})
-
+	log.Println("File Cache done, starting DB and loading...")
 	if e != nil {
 		log.Println(e)
 	}
-
+	ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
 	for count, path := range paths {
 
 		if count%(threads-1) == 0 {
@@ -98,28 +100,38 @@ func Go(p string, config Config, exc string, threads int) {
 			fmt.Println("Threads empty restarting")
 		}
 		fmt.Println(count)
+
 		// WaitTillMemoryFree()
 		wg.Add(1)
 		go func(ffname string, fpath string, synchronizer *sync.WaitGroup) {
 			// log.Println(ffname, " Started")
 			// create table query firxt
-			DelTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
-			createTableQuery := fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s);", exc, ffname[:len(ffname)-4], headers)
-			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s sslmode=require", config.User, config.Pwd, config.Host, config.Port, config.Name))
+			// DelTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
+			if strings.Contains(ffname[:len(ffname)-4], "&") {
+				ffname = strings.ReplaceAll(ffname, "&", "and")
+			}
+			if strings.Contains(ffname[:len(ffname)-4], "-") {
+				ffname = strings.ReplaceAll(ffname, "-", "0")
+			}
+			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s (%s);", exc, ffname[:len(ffname)-4], headers)
+
 			db, err := pgx.Connect(ccfg)
 
 			if err != nil {
 				log.Println("Error: ", err)
 			}
 			defer db.Close()
-			_, err = db.Exec(DelTableQuery)
-			if err != nil {
-				log.Println("Error in Delete Table on file: ", ffname, "\n err: ", err)
-			}
+			// _, err = db.Exec(DelTableQuery)
+			// if err != nil {
+			// 	log.Println("Error in Delete Table on file: ", ffname, "\n err: ", err)
+			// }
 			_, err = db.Exec(createTableQuery)
 			if err != nil {
 				log.Println("Error in Create Table on file: ", ffname, "\n err: ", err)
-				errFiles = append(errFiles, ffname)
+				db.Close()
+				synchronizer.Done()
+				return
+
 			}
 			// WaitTillMemoryFree()
 			f, _ := os.Open(fpath)
@@ -214,7 +226,7 @@ func GoCDS(p string, config Config, exc string, threads int) {
 				createTableQuery = fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s)", exc, ffname, headers2)
 			}
 			DelTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname)
-			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s sslmode=require", config.User, config.Pwd, config.Host, config.Port, config.Name))
+			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
 			db, err := pgx.Connect(ccfg)
 			if err != nil {
 				log.Println("Error: ", err)
@@ -310,7 +322,7 @@ func GoSpot(p string, config Config, exc string, threads int) {
 		go func(ffname, fpath string, synchroniser *sync.WaitGroup) {
 			// dropTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
 			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s (%s)", exc, ffname[:len(ffname)-4], headers)
-			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s sslmode=require", config.User, config.Pwd, config.Host, config.Port, config.Name))
+			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
 			db, err := pgx.Connect(ccfg)
 			if err != nil {
 				log.Println("Error: ", err)
@@ -341,12 +353,12 @@ func GoSpot(p string, config Config, exc string, threads int) {
 			for _, dp := range datum {
 				row := make([]interface{}, len(dp))
 				row[0], _ = strconv.Atoi(dp[0])
-				row[1], _ = strconv.Atoi(dp[1])
-				row[2], _ = strconv.Atoi(dp[2])
-				row[3], _ = strconv.Atoi(dp[3])
-				row[4], _ = strconv.Atoi(dp[4])
-				row[5], _ = strconv.Atoi(dp[5])
-				row[6], _ = strconv.Atoi(dp[6])
+				row[1], _ = strconv.ParseFloat(dp[1], 32)
+				row[2], _ = strconv.ParseFloat(dp[2], 32)
+				row[3], _ = strconv.ParseFloat(dp[3], 32)
+				row[4], _ = strconv.ParseFloat(dp[4], 32)
+				row[5], _ = strconv.ParseFloat(dp[5], 32)
+				// row[6], _ = strconv.Atoi(dp[6])
 				// row[7], _ = strconv.Atoi(dp[7])
 				// row[8], _ = strconv.Atoi(dp[8])
 				rows = append(rows, row)
@@ -378,7 +390,7 @@ func GenerateTableHeaders() string {
 }
 
 func GenerateTableHeadersSpot() string {
-	return "DateTime bigint, open integer,high integer,low integer,close integer, volume integer,lastclose integer,"
+	return "timestamp bigint, open float,high float,low float,close float, volume float,lastclose integer,"
 }
 
 func GenerateTableHeadersCDS(part int) string {
@@ -446,9 +458,10 @@ func GoCandle(p string, config Config, exc string, threads int) {
 		wg.Add(1)
 		go func(ffname, fpath string, synchroniser *sync.WaitGroup) {
 			// dropTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
-			csize := strings.Split(ffname[:len(ffname)-4], "_")[1]
-			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s_%s (%s)", exc, ffname[:len(ffname)-4], csize, headers)
-			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s sslmode=require", config.User, config.Pwd, config.Host, config.Port, config.Name))
+			csize := strings.Split(ffname[:len(ffname)-4], "_")[0]
+			inst := strings.Split(ffname[:len(ffname)-4], "_")[1]
+			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s_%s (%s)", exc, inst, csize, headers)
+			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
 			db, err := pgx.Connect(ccfg)
 			if err != nil {
 				log.Println("Error: ", err)
@@ -480,12 +493,12 @@ func GoCandle(p string, config Config, exc string, threads int) {
 				for _, dp := range datum {
 					row := make([]interface{}, len(dp))
 					row[0], _ = strconv.Atoi(dp[0])
-					row[1], _ = strconv.Atoi(dp[1])
-					row[2], _ = strconv.Atoi(dp[2])
-					row[3], _ = strconv.Atoi(dp[3])
-					row[4], _ = strconv.Atoi(dp[4])
-					row[5], _ = strconv.Atoi(dp[5])
-					row[6], _ = strconv.Atoi(dp[6])
+					row[1], _ = strconv.ParseFloat(dp[1], 32)
+					row[2], _ = strconv.ParseFloat(dp[2], 32)
+					row[3], _ = strconv.ParseFloat(dp[3], 32)
+					row[4], _ = strconv.ParseFloat(dp[4], 32)
+					row[5], _ = strconv.ParseFloat(dp[5], 32)
+					// row[6], _ = strconv.Atoi(dp[6])
 					// row[7], _ = strconv.Atoi(dp[7])
 					// row[8], _ = strconv.Atoi(dp[8])
 					rows = append(rows, row)
@@ -494,11 +507,11 @@ func GoCandle(p string, config Config, exc string, threads int) {
 				for _, dp := range datum {
 					row := make([]interface{}, len(dp))
 					row[0], _ = strconv.Atoi(dp[0])
-					row[1], _ = strconv.Atoi(dp[1])
-					row[2], _ = strconv.Atoi(dp[2])
-					row[3], _ = strconv.Atoi(dp[3])
-					row[4], _ = strconv.Atoi(dp[4])
-					row[5], _ = strconv.Atoi(dp[5])
+					row[1], _ = strconv.ParseFloat(dp[1], 32)
+					row[2], _ = strconv.ParseFloat(dp[2], 32)
+					row[3], _ = strconv.ParseFloat(dp[3], 32)
+					row[4], _ = strconv.ParseFloat(dp[4], 32)
+					row[5], _ = strconv.ParseFloat(dp[5], 32)
 					// row[6], _ = strconv.Atoi(dp[6])
 					// row[7], _ = strconv.Atoi(dp[7])
 					// row[8], _ = strconv.Atoi(dp[8])
@@ -506,7 +519,7 @@ func GoCandle(p string, config Config, exc string, threads int) {
 				}
 			}
 			f.Close()
-			x, err := db.CopyFrom(pgx.Identifier{exc, fmt.Sprintf("%s_%s", strings.ToLower(ffname[:len(ffname)-4]), csize)}, newheads, pgx.CopyFromRows(rows))
+			x, err := db.CopyFrom(pgx.Identifier{exc, fmt.Sprintf("%s_%s", strings.ToLower(inst), csize)}, newheads, pgx.CopyFromRows(rows))
 			log.Println(ffname, " DONE: ", x, err)
 			// log.Println(rows)
 			db.Close()
