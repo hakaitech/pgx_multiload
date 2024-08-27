@@ -12,25 +12,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gen0cide/waiter"
 	"github.com/jackc/pgx"
 	"github.com/pbnjay/memory"
 )
 
 var (
 	source   = flag.String("s", "", "Source Files Directory to be copied")
-	host     = flag.String("h", "ruphiya-db-do-user-14476372-0.b.db.ondigitalocean.com", "Hostname for destination PSQL")
-	port     = flag.Int("P", 25060, "Port number")
-	user     = flag.String("U", "doadmin", "User for DB")
-	db       = flag.String("db", "ruphiya", "Database for destination PSQL")
-	password = flag.String("passwd", "AVNS_ybQV3zZ8J4V5lDs6neT", "Password for destination PSQL user postgres")
+	host     = flag.String("h", "localhost", "Hostname for destination PSQL")
+	port     = flag.Int("P", 5432, "Port number")
+	user     = flag.String("U", "postgres", "User for DB")
+	db       = flag.String("db", "postgres", "Database for destination PSQL")
+	password = flag.String("passwd", "", "Password for destination PSQL user postgres")
 	schema   = flag.String("schema", "", "Schema for Fill")
-	threads  = flag.Int("threads", 200, "Number of Threads for Parallel Processing")
-	spot     = flag.Bool("spot", false, "Enables Spot Writer")
-	fno      = flag.Bool("fno", false, "Enables FnO Writer")
-	cds      = flag.Bool("cds", false, "Enables CDS Writer")
-	mcx      = flag.Bool("mcx", false, "Enables MCX Writer")
-	candle   = flag.Bool("candle", false, "Enables Candle Writer")
+	threads  = flag.Int("threads", 300, "Number of Threads for Parallel Processing")
 )
 
 type Config struct {
@@ -44,31 +38,12 @@ type Config struct {
 func main() {
 	var config Config
 	flag.Parse()
-	config.Host = "103.191.209.107"
-	config.Name = "ruphiya"
-	config.Port = 5432
-	config.Pwd = "1NuGd02T92VbhPmFu0e3sWekVX6R0P"
-	config.User = "anitix"
-	// f, err := os.OpenFile("pgx_multiload.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	// if err != nil {
-	// 	log.Fatal("Error in creating Logfile")
-	// }
-	// defer f.Close()
-	// log.SetOutput(f)
-	// if *spot {
-	// 	GoSpot(*source, config, *schema, *threads)
-	// }
-	// if *fno {
-	// 	Go(*source, config, *schema, *threads)
-	// }
-	// if *candle {
-	// 	GoCandle(*source, config, *schema, *threads)
-	// }
-	// if *cds {
-	// 	GoCDS(*source, config, *schema, *threads)
-	// }
-	Go("/Data", config, "nse", 120)
-
+	config.Host = *host
+	config.Name = *db
+	config.Port = *port
+	config.Pwd = *password
+	config.User = *user
+	GoSpot(*source, config, "nse_spot", 120)
 }
 
 func Go(p string, config Config, exc string, threads int) {
@@ -106,11 +81,11 @@ func Go(p string, config Config, exc string, threads int) {
 		go func(ffname string, fpath string, synchronizer *sync.WaitGroup) {
 			// log.Println(ffname, " Started")
 			// create table query firxt
-			// DelTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
-			if strings.Contains(ffname[:len(ffname)-4], "&") {
+			DelTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
+			if strings.Contains(ffname, "&") {
 				ffname = strings.ReplaceAll(ffname, "&", "and")
 			}
-			if strings.Contains(ffname[:len(ffname)-4], "-") {
+			if strings.Contains(ffname, "-") {
 				ffname = strings.ReplaceAll(ffname, "-", "0")
 			}
 			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s (%s);", exc, ffname[:len(ffname)-4], headers)
@@ -121,10 +96,13 @@ func Go(p string, config Config, exc string, threads int) {
 				log.Println("Error: ", err)
 			}
 			defer db.Close()
-			// _, err = db.Exec(DelTableQuery)
-			// if err != nil {
-			// 	log.Println("Error in Delete Table on file: ", ffname, "\n err: ", err)
-			// }
+			_, err = db.Exec(DelTableQuery)
+			if err != nil {
+				log.Println("Error in Delete Table on file: ", ffname, "\n err: ", err)
+			} else {
+				fmt.Println("Dropped")
+			}
+
 			_, err = db.Exec(createTableQuery)
 			if err != nil {
 				log.Println("Error in Create Table on file: ", ffname, "\n err: ", err)
@@ -184,113 +162,6 @@ func Go(p string, config Config, exc string, threads int) {
 	log.Println("Done Loading: \n errored files: ", errFiles, " \n Time Taken: ", time.Since(st))
 }
 
-func GoCDS(p string, config Config, exc string, threads int) {
-	//this for nse
-	var errFiles []string
-	st := time.Now()
-	log.Println("RUNNING LOADER FOR :", p, " WITH :", threads, "threads on exchange :", exc)
-	headers1 := GenerateTableHeadersCDS(1)
-	headers2 := GenerateTableHeadersCDS(2)
-	wg := waiter.New("Uploading Files ", log.Writer())
-	// var wg sync.WaitGroup
-	var paths []string
-	// pb := progressbar.Default(-1, "Building Cache")
-	e := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
-		if err == nil && strings.Contains(info.Name(), ".csv") {
-			paths = append(paths, path)
-		}
-		return nil
-	})
-
-	if e != nil {
-		log.Println(e)
-	}
-
-	for count, path := range paths {
-
-		if count%(threads) == 0 && count > 0 {
-			wg.Wait()
-		}
-		// WaitTillMemoryFree()
-		wg.Add(1)
-		go func(ffname string, fpath string, synchronizer *waiter.Waiter) {
-			// log.Println(ffname, " Started")
-			// create table query firxt
-			var createTableQuery string
-			ffname = ffname[:len(ffname)-4]
-			part := strings.Split(ffname, "_")[2]
-
-			if part == "1" {
-				createTableQuery = fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s)", exc, ffname, headers1)
-			} else {
-				createTableQuery = fmt.Sprintf("CREATE UNLOGGED TABLE %s.%s (%s)", exc, ffname, headers2)
-			}
-			DelTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname)
-			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
-			db, err := pgx.Connect(ccfg)
-			if err != nil {
-				log.Println("Error: ", err)
-			}
-			_, err = db.Exec(DelTableQuery)
-			if err != nil {
-				// log.Println("Error in Delete Table on file: ", ffname, "\n err: ", err)
-				errFiles = append(errFiles, ffname)
-			}
-			_, err = db.Exec(createTableQuery)
-			if err != nil {
-				log.Println("Error in Create Table on file: ", ffname, "\n err: ", err)
-				errFiles = append(errFiles, ffname)
-			}
-			// WaitTillMemoryFree()
-			f, _ := os.Open(fpath)
-			defer f.Close()
-			csvreader := csv.NewReader(f)
-			heads, _ := csvreader.Read()
-			var rows [][]interface{}
-
-			var newheads []string
-
-			for _, h := range heads {
-				newheads = append(newheads, strings.ToLower(h))
-			}
-			// WaitTillMemoryFree()
-			datum, _ := csvreader.ReadAll()
-			for _, dp := range datum {
-				row := make([]interface{}, len(dp))
-				row[0] = dp[0]
-				row[1], _ = strconv.Atoi(dp[1])
-				i := 2
-				for i < len(dp) {
-					tmp := dp[i]
-					tmp = tmp[1 : len(tmp)-1]
-					nums := strings.Split(tmp, ",")
-					intarr := []int{}
-					for _, n := range nums {
-						cn, err := strconv.Atoi(strings.TrimSpace(n))
-						if err != nil {
-							log.Println(err)
-						}
-						intarr = append(intarr, cn)
-					}
-					row[i] = intarr
-					i += 1
-				}
-
-				rows = append(rows, row)
-			}
-			f.Close()
-			db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname)}, newheads, pgx.CopyFromRows(rows))
-			// log.Println(x, err)
-			db.Close()
-			synchronizer.Done()
-
-		}(strings.Split(path, "/")[len(strings.Split(path, "/"))-1], path, wg)
-
-	}
-	wg.Wait()
-	log.Println("Done Loading: \n errored files: ", errFiles, " \n Time Taken: ", time.Since(st))
-}
-
 func GoSpot(p string, config Config, exc string, threads int) {
 	starttime := time.Now()
 	fmt.Println("RUNNING LOADER FOR :", p, " WITH :", threads, "threads on schema :", exc)
@@ -320,35 +191,45 @@ func GoSpot(p string, config Config, exc string, threads int) {
 		// WaitTillMemoryFree()
 		wg.Add(1)
 		go func(ffname, fpath string, synchroniser *sync.WaitGroup) {
-			// dropTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
+			var render string
+			if strings.Contains(ffname, "_candlestick") {
+				ffname = strings.ReplaceAll(ffname, "_candlestick", "")
+				render = ffname[:2]
+				ffname = strings.ReplaceAll(ffname, fmt.Sprintf("%s_", render), "")
+			}
+			dropTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
 			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s (%s)", exc, ffname[:len(ffname)-4], headers)
+			createCandleQuery := fmt.Sprintf("CREATE TABLE %s.%s (%s)", exc, fmt.Sprintf("%s_%s_candlestick", render, ffname[:len(ffname)-4]), headers)
 			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
 			db, err := pgx.Connect(ccfg)
 			if err != nil {
 				log.Println("Error: ", err)
 			}
 			defer db.Close()
-			// _, err = db.Exec(dropTableQuery)
-			// if err != nil {
-			// 	errFiles = append(errFiles, ffname)
-			// }
-			// log.Println("DROPPED ", ffname)
+			_, err = db.Exec(dropTableQuery)
+			if err != nil {
+				errFiles = append(errFiles, ffname)
+			}
+			log.Println("DROPPED ", ffname)
 			_, err = db.Exec(createTableQuery)
 			if err != nil {
 				errFiles = append(errFiles, ffname)
 			}
 			log.Println("CREATED ", ffname)
+			_, err = db.Exec(createCandleQuery)
+			if err != nil {
+				errFiles = append(errFiles, ffname)
+			}
+			log.Println("CREATED CANDLE", ffname)
 			// WaitTillMemoryFree()
 			f, _ := os.Open(fpath)
 			defer f.Close()
 			csvreader := csv.NewReader(f)
 			heads, _ := csvreader.Read()
+			fmt.Println(heads)
 			var rows [][]interface{}
-			var newheads []string
+			var newheads = []string{"datetime", "open", "high", "low", "close", "volume", "lastclose"}
 
-			for _, h := range heads {
-				newheads = append(newheads, strings.ToLower(h))
-			}
 			datum, _ := csvreader.ReadAll()
 			for _, dp := range datum {
 				row := make([]interface{}, len(dp))
@@ -358,7 +239,7 @@ func GoSpot(p string, config Config, exc string, threads int) {
 				row[3], _ = strconv.ParseFloat(dp[3], 32)
 				row[4], _ = strconv.ParseFloat(dp[4], 32)
 				row[5], _ = strconv.ParseFloat(dp[5], 32)
-				// row[6], _ = strconv.Atoi(dp[6])
+				row[6], _ = strconv.ParseFloat(dp[6], 32)
 				// row[7], _ = strconv.Atoi(dp[7])
 				// row[8], _ = strconv.Atoi(dp[8])
 				rows = append(rows, row)
@@ -367,6 +248,8 @@ func GoSpot(p string, config Config, exc string, threads int) {
 			x, err := db.CopyFrom(pgx.Identifier{exc, strings.ToLower(ffname[:len(ffname)-4])}, newheads, pgx.CopyFromRows(rows))
 			log.Println(ffname, " DONE: ", x, err)
 			// log.Println(rows)
+			x, err = db.CopyFrom(pgx.Identifier{exc, strings.ToLower(fmt.Sprintf("%s_%s_candlestick", render, ffname[:len(ffname)-4]))}, newheads, pgx.CopyFromRows(rows))
+			log.Println(ffname, " DONE: ", x, err)
 			db.Close()
 			synchroniser.Done()
 		}(strings.Split(path, "/")[len(strings.Split(path, "/"))-1], path, &wg)
@@ -390,7 +273,7 @@ func GenerateTableHeaders() string {
 }
 
 func GenerateTableHeadersSpot() string {
-	return "timestamp bigint, open float,high float,low float,close float, volume float,lastclose integer,"
+	return "datetime bigint, open float,high float,low float,close float, volume float,lastclose float,"
 }
 
 func GenerateTableHeadersCDS(part int) string {
@@ -460,66 +343,99 @@ func GoCandle(p string, config Config, exc string, threads int) {
 			// dropTableQuery := fmt.Sprintf("DROP TABLE %s.%s", exc, ffname[:len(ffname)-4])
 			csize := strings.Split(ffname[:len(ffname)-4], "_")[0]
 			inst := strings.Split(ffname[:len(ffname)-4], "_")[1]
-			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s_%s (%s)", exc, inst, csize, headers)
+			ctype := strings.Split(ffname[:len(ffname)-4], "_")[2]
+			inst = strings.ToLower(inst)
+			createTableQuery := fmt.Sprintf("CREATE TABLE %s.%s_%s_%s (%s)", exc, inst, csize, ctype, headers)
+
+			createTableQuery = fmt.Sprintf("CREATE TABLE %s.%s_%s_%s (%s)", exc, inst, csize, ctype, headers[:len(headers)-16])
+
+			fmt.Println(createTableQuery)
 			ccfg, _ := pgx.ParseConnectionString(fmt.Sprintf("user=%s password=%s host=%s port=%d  dbname=%s", config.User, config.Pwd, config.Host, config.Port, config.Name))
 			db, err := pgx.Connect(ccfg)
 			if err != nil {
 				log.Println("Error: ", err)
 			}
 			defer db.Close()
-			// _, err = db.Exec(dropTableQuery)
-			// if err != nil {
-			// 	errFiles = append(errFiles, ffname)
-			// }
-			// log.Println("DROPPED ", ffname)
-			_, err = db.Exec(createTableQuery)
+			a, err := db.Exec(createTableQuery)
+			fmt.Println("ExecResult: ", a)
 			if err != nil {
+				log.Println("Create Error ", err)
 				errFiles = append(errFiles, ffname)
+			} else {
+				log.Println("CREATED ", ffname)
 			}
-			log.Println("CREATED ", ffname)
+
 			// WaitTillMemoryFree()
-			f, _ := os.Open(fpath)
+			f, err := os.Open(fpath)
+			if err != nil {
+				fmt.Println(err)
+			}
 			defer f.Close()
 			csvreader := csv.NewReader(f)
-			heads, _ := csvreader.Read()
+			heads, err := csvreader.Read()
+			fmt.Println(heads, err)
 			var rows [][]interface{}
-			var newheads []string
+			var newheads = []string{"datetime", "open", "high", "low", "close", "volume", "lastclose"}
 
-			for _, h := range heads {
-				newheads = append(newheads, strings.ToLower(h))
-			}
-			datum, _ := csvreader.ReadAll()
-			if csize == "1m" {
-				for _, dp := range datum {
-					row := make([]interface{}, len(dp))
-					row[0], _ = strconv.Atoi(dp[0])
-					row[1], _ = strconv.ParseFloat(dp[1], 32)
-					row[2], _ = strconv.ParseFloat(dp[2], 32)
-					row[3], _ = strconv.ParseFloat(dp[3], 32)
-					row[4], _ = strconv.ParseFloat(dp[4], 32)
-					row[5], _ = strconv.ParseFloat(dp[5], 32)
-					// row[6], _ = strconv.Atoi(dp[6])
+			newheads = newheads[:len(newheads)-1]
+
+			datum, err := csvreader.ReadAll()
+			// fmt.Println(datum)
+			for _, dp := range datum {
+				row := make([]interface{}, len(dp))
+				row[0], err = strconv.Atoi(dp[0])
+				if err != nil {
+					fmt.Println(err)
+				}
+
+				row[1], err = strconv.ParseFloat(dp[1], 64)
+				if err != nil {
+					fmt.Println(err, 1)
+				}
+
+				row[2], err = strconv.ParseFloat(dp[2], 64)
+				if err != nil {
+					fmt.Println(err, 2)
+				}
+
+				row[3], err = strconv.ParseFloat(dp[3], 64)
+				if err != nil {
+					fmt.Println(err, 3)
+				}
+
+				row[4], err = strconv.ParseFloat(dp[4], 64)
+				if err != nil {
+					fmt.Println(err, 4)
+				}
+
+				row[5], err = strconv.ParseFloat(dp[5], 64)
+				if err != nil {
+					fmt.Println(err, 5)
+				}
+				if ctype == "HA" || ctype == "ha" || csize == "1D" {
+					rows = append(rows, row)
+					continue
+				} else {
+					if dp[6] == "" {
+						row[6] = 0.0
+					} else {
+						row[6], err = strconv.ParseFloat(dp[6], 64)
+						if err != nil {
+							fmt.Println(err, 6)
+						}
+					}
+
 					// row[7], _ = strconv.Atoi(dp[7])
 					// row[8], _ = strconv.Atoi(dp[8])
+					// fmt.Println(row)
 					rows = append(rows, row)
 				}
-			} else {
-				for _, dp := range datum {
-					row := make([]interface{}, len(dp))
-					row[0], _ = strconv.Atoi(dp[0])
-					row[1], _ = strconv.ParseFloat(dp[1], 32)
-					row[2], _ = strconv.ParseFloat(dp[2], 32)
-					row[3], _ = strconv.ParseFloat(dp[3], 32)
-					row[4], _ = strconv.ParseFloat(dp[4], 32)
-					row[5], _ = strconv.ParseFloat(dp[5], 32)
-					// row[6], _ = strconv.Atoi(dp[6])
-					// row[7], _ = strconv.Atoi(dp[7])
-					// row[8], _ = strconv.Atoi(dp[8])
-					rows = append(rows, row)
-				}
+
 			}
+
 			f.Close()
-			x, err := db.CopyFrom(pgx.Identifier{exc, fmt.Sprintf("%s_%s", strings.ToLower(inst), csize)}, newheads, pgx.CopyFromRows(rows))
+			// fmt.Println("table", fmt.Sprintf("%s_%s_%s", strings.ToLower(inst), csize, ctype))
+			x, err := db.CopyFrom(pgx.Identifier{exc, fmt.Sprintf("%s_%s_%s", strings.ToLower(inst), strings.ToLower(csize), strings.ToLower(ctype))}, newheads, pgx.CopyFromRows(rows))
 			log.Println(ffname, " DONE: ", x, err)
 			// log.Println(rows)
 			db.Close()
